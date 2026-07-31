@@ -619,3 +619,19 @@ def get_platform_stats():
         "total_bets": total_bets,
         "total_staked": total_staked,
     }
+# ===== FIX FUNCTION - Add at the bottom =====
+def fix_candidate_names():
+    """Fix old PDP records to Atiku - RUN ONCE ONLY"""
+    conn = get_connection()
+    c = conn.cursor()
+    try:
+        c.execute("UPDATE bets SET candidate = 'Atiku' WHERE candidate = 'PDP'")
+        conn.commit()
+        updated = c.rowcount
+        print(f"✅ Updated {updated} old PDP records to Atiku")
+        return updated
+    except Exception as e:
+        print(f"⚠️ Error updating candidate names: {e}")
+        return 0
+    finally:
+        conn.close()
