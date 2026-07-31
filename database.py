@@ -96,12 +96,6 @@ def init_db():
         )
     """)
 
-    # Add withdrawal_address column to users if not present (safe migration)
-    try:
-        c.execute("ALTER TABLE users ADD COLUMN withdrawal_address TEXT")
-    except Exception:
-        pass  # Column already exists
-
     conn.commit()
     conn.close()
     print("✅ Database initialized successfully.")
@@ -109,10 +103,7 @@ def init_db():
 
 # ─── User helpers ────────────────────────────────────────────────────────────
 
-
-def get_or_create_user(
-    user_id: int, username: str, full_name: str, referred_by_code: str = None
-) -> dict:
+def get_or_create_user(user_id: int, username: str, full_name: str, referred_by_code: str = None) -> dict:
     conn = get_connection()
     c = conn.cursor()
 
@@ -124,20 +115,15 @@ def get_or_create_user(
         referred_by = None
 
         if referred_by_code:
-            c.execute(
-                "SELECT user_id FROM users WHERE referral_code = ?", (referred_by_code,)
-            )
+            c.execute("SELECT user_id FROM users WHERE referral_code = ?", (referred_by_code,))
             ref_row = c.fetchone()
             if ref_row and ref_row["user_id"] != user_id:
                 referred_by = ref_row["user_id"]
 
-        c.execute(
-            """
+        c.execute("""
             INSERT INTO users (user_id, username, full_name, referral_code, referred_by)
             VALUES (?, ?, ?, ?, ?)
-        """,
-            (user_id, username, full_name, referral_code, referred_by),
-        )
+        """, (user_id, username, full_name, referral_code, referred_by))
         conn.commit()
 
         c.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
@@ -159,10 +145,7 @@ def get_user(user_id: int):
 def update_balance(user_id: int, amount: float):
     conn = get_connection()
     c = conn.cursor()
-    c.execute(
-        "UPDATE users SET balance_usd = balance_usd + ? WHERE user_id = ?",
-        (amount, user_id),
-    )
+    c.execute("UPDATE users SET balance_usd = balance_usd + ? WHERE user_id = ?", (amount, user_id))
     conn.commit()
     conn.close()
 
@@ -178,18 +161,14 @@ def get_all_users():
 
 # ─── Deposit helpers ──────────────────────────────────────────────────────────
 
-
 def create_deposit(user_id: int, amount_usd: float, method: str, tx_hash: str) -> str:
     conn = get_connection()
     c = conn.cursor()
     deposit_id = str(uuid.uuid4())[:12].upper()
-    c.execute(
-        """
+    c.execute("""
         INSERT INTO deposits (id, user_id, amount_usd, method, tx_hash)
         VALUES (?, ?, ?, ?, ?)
-    """,
-        (deposit_id, user_id, amount_usd, method, tx_hash),
-    )
+    """, (deposit_id, user_id, amount_usd, method, tx_hash))
     conn.commit()
     conn.close()
     return deposit_id
@@ -228,7 +207,6 @@ def get_all_deposits():
 def confirm_deposit(deposit_id: str, from_config=False):
     """Confirm a deposit: credit user balance and optionally pay referral bonus."""
     from config import REFERRAL_BONUS_PERCENT
-
     conn = get_connection()
     c = conn.cursor()
 
@@ -241,19 +219,14 @@ def confirm_deposit(deposit_id: str, from_config=False):
     deposit = dict(deposit)
 
     # Credit user
-    c.execute(
-        "UPDATE users SET balance_usd = balance_usd + ? WHERE user_id = ?",
-        (deposit["amount_usd"], deposit["user_id"]),
-    )
+    c.execute("UPDATE users SET balance_usd = balance_usd + ? WHERE user_id = ?",
+              (deposit["amount_usd"], deposit["user_id"]))
 
     # Mark deposit confirmed
-    c.execute(
-        """
+    c.execute("""
         UPDATE deposits SET status = 'confirmed', confirmed_at = ?
         WHERE id = ?
-    """,
-        (datetime.utcnow().isoformat(), deposit_id),
-    )
+    """, (datetime.utcnow().isoformat(), deposit_id))
 
     # Pay referral bonus to referrer (first deposit only)
     c.execute("SELECT referred_by FROM users WHERE user_id = ?", (deposit["user_id"],))
@@ -263,46 +236,32 @@ def confirm_deposit(deposit_id: str, from_config=False):
     bonus_paid = 0.0
     if referrer_id:
         # Check if this user had a prior confirmed deposit
-        c.execute(
-            """
+        c.execute("""
             SELECT COUNT(*) as cnt FROM deposits
             WHERE user_id = ? AND status = 'confirmed' AND id != ?
-        """,
-            (deposit["user_id"], deposit_id),
-        )
+        """, (deposit["user_id"], deposit_id))
         prior = c.fetchone()["cnt"]
         if prior == 0:
             bonus = round(deposit["amount_usd"] * REFERRAL_BONUS_PERCENT / 100, 4)
-            c.execute(
-                "UPDATE users SET balance_usd = balance_usd + ? WHERE user_id = ?",
-                (bonus, referrer_id),
-            )
+            c.execute("UPDATE users SET balance_usd = balance_usd + ? WHERE user_id = ?",
+                      (bonus, referrer_id))
             bonus_id = str(uuid.uuid4())[:12].upper()
-            c.execute(
-                """
+            c.execute("""
                 INSERT INTO referral_bonuses (id, referrer_id, referred_id, bonus_usd)
                 VALUES (?, ?, ?, ?)
-            """,
-                (bonus_id, referrer_id, deposit["user_id"], bonus),
-            )
+            """, (bonus_id, referrer_id, deposit["user_id"], bonus))
             bonus_paid = bonus
 
     conn.commit()
     conn.close()
-    return True, {
-        "deposit": deposit,
-        "referrer_id": referrer_id,
-        "bonus_paid": bonus_paid,
-    }
+    return True, {"deposit": deposit, "referrer_id": referrer_id, "bonus_paid": bonus_paid}
 
 
 def reject_deposit(deposit_id: str):
     conn = get_connection()
     c = conn.cursor()
-    c.execute(
-        "UPDATE deposits SET status = 'rejected' WHERE id = ? AND status = 'pending'",
-        (deposit_id,),
-    )
+    c.execute("UPDATE deposits SET status = 'rejected' WHERE id = ? AND status = 'pending'",
+              (deposit_id,))
     affected = c.rowcount
     conn.commit()
     conn.close()
@@ -312,9 +271,7 @@ def reject_deposit(deposit_id: str):
 def get_user_deposits(user_id: int):
     conn = get_connection()
     c = conn.cursor()
-    c.execute(
-        "SELECT * FROM deposits WHERE user_id = ? ORDER BY created_at DESC", (user_id,)
-    )
+    c.execute("SELECT * FROM deposits WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
     rows = c.fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -322,10 +279,7 @@ def get_user_deposits(user_id: int):
 
 # ─── Bet helpers ──────────────────────────────────────────────────────────────
 
-
-def place_bet(
-    user_id: int, candidate: str, amount_usd: float, multiplier: float
-) -> tuple:
+def place_bet(user_id: int, candidate: str, amount_usd: float, multiplier: float) -> tuple:
     conn = get_connection()
     c = conn.cursor()
 
@@ -338,17 +292,12 @@ def place_bet(
     potential_win = round(amount_usd * multiplier, 4)
     bet_id = str(uuid.uuid4())[:12].upper()
 
-    c.execute(
-        "UPDATE users SET balance_usd = balance_usd - ? WHERE user_id = ?",
-        (amount_usd, user_id),
-    )
-    c.execute(
-        """
+    c.execute("UPDATE users SET balance_usd = balance_usd - ? WHERE user_id = ?",
+              (amount_usd, user_id))
+    c.execute("""
         INSERT INTO bets (id, user_id, candidate, amount_usd, multiplier, potential_win)
         VALUES (?, ?, ?, ?, ?, ?)
-    """,
-        (bet_id, user_id, candidate, amount_usd, multiplier, potential_win),
-    )
+    """, (bet_id, user_id, candidate, amount_usd, multiplier, potential_win))
 
     conn.commit()
     conn.close()
@@ -358,9 +307,7 @@ def place_bet(
 def get_user_bets(user_id: int):
     conn = get_connection()
     c = conn.cursor()
-    c.execute(
-        "SELECT * FROM bets WHERE user_id = ? ORDER BY created_at DESC", (user_id,)
-    )
+    c.execute("SELECT * FROM bets WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
     rows = c.fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -396,23 +343,19 @@ def get_bet_stats():
 
 # ─── Referral helpers ─────────────────────────────────────────────────────────
 
-
 def get_referral_stats(user_id: int):
     conn = get_connection()
     c = conn.cursor()
     c.execute("SELECT COUNT(*) as total FROM users WHERE referred_by = ?", (user_id,))
     total_referrals = c.fetchone()["total"]
-    c.execute(
-        "SELECT COALESCE(SUM(bonus_usd), 0) as total FROM referral_bonuses WHERE referrer_id = ?",
-        (user_id,),
-    )
+    c.execute("SELECT COALESCE(SUM(bonus_usd), 0) as total FROM referral_bonuses WHERE referrer_id = ?",
+              (user_id,))
     total_earned = c.fetchone()["total"]
     conn.close()
     return {"total_referrals": total_referrals, "total_earned": total_earned}
 
 
 # ─── Wallet helpers ───────────────────────────────────────────────────────────
-
 
 def get_wallets():
     conn = get_connection()
@@ -426,33 +369,25 @@ def get_wallets():
 def set_wallet(method: str, address: str):
     conn = get_connection()
     c = conn.cursor()
-    c.execute(
-        """
+    c.execute("""
         INSERT INTO wallets (method, address, updated_at) VALUES (?, ?, ?)
         ON CONFLICT(method) DO UPDATE SET address = excluded.address, updated_at = excluded.updated_at
-    """,
-        (method, address, datetime.utcnow().isoformat()),
-    )
+    """, (method, address, datetime.utcnow().isoformat()))
     conn.commit()
     conn.close()
 
 
 # ─── Withdrawal helpers ───────────────────────────────────────────────────────
 
-
 def set_withdrawal_address(user_id: int, address: str):
     conn = get_connection()
     c = conn.cursor()
-    c.execute(
-        "UPDATE users SET withdrawal_address = ? WHERE user_id = ?", (address, user_id)
-    )
+    c.execute("UPDATE users SET withdrawal_address = ? WHERE user_id = ?", (address, user_id))
     conn.commit()
     conn.close()
 
 
-def create_withdrawal(
-    user_id: int, amount_usd: float, method: str, address: str
-) -> tuple:
+def create_withdrawal(user_id: int, amount_usd: float, method: str, address: str) -> tuple:
     conn = get_connection()
     c = conn.cursor()
 
@@ -463,31 +398,19 @@ def create_withdrawal(
         return False, "Insufficient balance."
 
     # Check for already-pending withdrawal from this user
-    c.execute(
-        "SELECT COUNT(*) as cnt FROM withdrawals WHERE user_id = ? AND status = 'pending'",
-        (user_id,),
-    )
+    c.execute("SELECT COUNT(*) as cnt FROM withdrawals WHERE user_id = ? AND status = 'pending'", (user_id,))
     if c.fetchone()["cnt"] > 0:
         conn.close()
-        return (
-            False,
-            "You already have a pending withdrawal. Please wait for it to be processed.",
-        )
+        return False, "You already have a pending withdrawal. Please wait for it to be processed."
 
     # Hold (deduct) balance immediately so user can't double-spend
-    c.execute(
-        "UPDATE users SET balance_usd = balance_usd - ? WHERE user_id = ?",
-        (amount_usd, user_id),
-    )
+    c.execute("UPDATE users SET balance_usd = balance_usd - ? WHERE user_id = ?", (amount_usd, user_id))
 
     wd_id = str(uuid.uuid4())[:12].upper()
-    c.execute(
-        """
+    c.execute("""
         INSERT INTO withdrawals (id, user_id, amount_usd, method, address)
         VALUES (?, ?, ?, ?, ?)
-    """,
-        (wd_id, user_id, amount_usd, method, address),
-    )
+    """, (wd_id, user_id, amount_usd, method, address))
     conn.commit()
     conn.close()
     return True, wd_id
@@ -526,10 +449,7 @@ def get_all_withdrawals():
 def get_user_withdrawals(user_id: int):
     conn = get_connection()
     c = conn.cursor()
-    c.execute(
-        "SELECT * FROM withdrawals WHERE user_id = ? ORDER BY created_at DESC",
-        (user_id,),
-    )
+    c.execute("SELECT * FROM withdrawals WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
     rows = c.fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -553,13 +473,10 @@ def approve_withdrawal(wd_id: str) -> tuple:
     if not wd or wd["status"] != "pending":
         conn.close()
         return False, "Withdrawal not found or already processed."
-    c.execute(
-        """
+    c.execute("""
         UPDATE withdrawals SET status = 'approved', processed_at = ?
         WHERE id = ?
-    """,
-        (datetime.utcnow().isoformat(), wd_id),
-    )
+    """, (datetime.utcnow().isoformat(), wd_id))
     conn.commit()
     conn.close()
     return True, dict(wd)
@@ -575,24 +492,18 @@ def reject_withdrawal(wd_id: str) -> tuple:
         conn.close()
         return False, "Withdrawal not found or already processed."
     # Refund
-    c.execute(
-        "UPDATE users SET balance_usd = balance_usd + ? WHERE user_id = ?",
-        (wd["amount_usd"], wd["user_id"]),
-    )
-    c.execute(
-        """
+    c.execute("UPDATE users SET balance_usd = balance_usd + ? WHERE user_id = ?",
+              (wd["amount_usd"], wd["user_id"]))
+    c.execute("""
         UPDATE withdrawals SET status = 'rejected', processed_at = ?
         WHERE id = ?
-    """,
-        (datetime.utcnow().isoformat(), wd_id),
-    )
+    """, (datetime.utcnow().isoformat(), wd_id))
     conn.commit()
     conn.close()
     return True, dict(wd)
 
 
 # ─── Stats helpers ────────────────────────────────────────────────────────────
-
 
 def get_platform_stats():
     conn = get_connection()
@@ -601,15 +512,11 @@ def get_platform_stats():
     total_users = c.fetchone()["cnt"]
     c.execute("SELECT COUNT(*) as cnt FROM deposits WHERE status = 'confirmed'")
     total_deposits = c.fetchone()["cnt"]
-    c.execute(
-        "SELECT COALESCE(SUM(amount_usd),0) as total FROM deposits WHERE status = 'confirmed'"
-    )
+    c.execute("SELECT COALESCE(SUM(amount_usd),0) as total FROM deposits WHERE status = 'confirmed'")
     total_deposited = c.fetchone()["total"]
     c.execute("SELECT COUNT(*) as cnt FROM bets WHERE status = 'active'")
     total_bets = c.fetchone()["cnt"]
-    c.execute(
-        "SELECT COALESCE(SUM(amount_usd),0) as total FROM bets WHERE status = 'active'"
-    )
+    c.execute("SELECT COALESCE(SUM(amount_usd),0) as total FROM bets WHERE status = 'active'")
     total_staked = c.fetchone()["total"]
     conn.close()
     return {
@@ -619,19 +526,3 @@ def get_platform_stats():
         "total_bets": total_bets,
         "total_staked": total_staked,
     }
-# ===== FIX FUNCTION - Add at the bottom =====
-def fix_candidate_names():
-    """Fix old PDP records to Atiku - RUN ONCE ONLY"""
-    conn = get_connection()
-    c = conn.cursor()
-    try:
-        c.execute("UPDATE bets SET candidate = 'Atiku' WHERE candidate = 'PDP'")
-        conn.commit()
-        updated = c.rowcount
-        print(f"✅ Updated {updated} old PDP records to Atiku")
-        return updated
-    except Exception as e:
-        print(f"⚠️ Error updating candidate names: {e}")
-        return 0
-    finally:
-        conn.close()
