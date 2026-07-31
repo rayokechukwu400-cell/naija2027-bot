@@ -1,3 +1,9 @@
+
+async def deposit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # 🔥 TEST - Remove this after testing
+    await update.message.reply_text("🔥 /deposit command is WORKING!")
+    return  # ← This will stop the function here for testing
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 
