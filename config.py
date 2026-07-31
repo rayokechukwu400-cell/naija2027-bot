@@ -7,16 +7,28 @@ load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 BOT_USERNAME = "naija2027election_bot"
 
-# Admin Configuration
-ADMIN_IDS = [int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip()]
 
-# Database
-DATABASE_URL = os.getenv("DATABASE_URL", "betting_bot.db")
+# Admin Configuration
+def _parse_admin_ids(raw: str) -> list:
+    ids = []
+    for part in raw.split(","):
+        # Strip any non-digit prefix like "User ID: " and whitespace
+        digits = "".join(c for c in part if c.isdigit())
+        if digits:
+            ids.append(int(digits))
+    return ids
+
+
+ADMIN_IDS = _parse_admin_ids(os.getenv("ADMIN_IDS", ""))
+
+# Database (using SQLITE_DB_PATH to avoid conflict with Replit's managed DATABASE_URL)
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATABASE_URL = os.getenv("SQLITE_DB_PATH", os.path.join(_BASE_DIR, "betting_bot.db"))
 
 # Candidates and Multipliers
 CANDIDATES = {
     "tinubu": {"name": "Bola Tinubu (APC)", "multiplier": 70},
-    "atiku": {"name": "Atiku Abubakar (PDP)", "multiplier": 50},
+    "adc": {"name": "Atiku Abubakar (ADC)", "multiplier": 50},
     "obi": {"name": "Peter Obi (NDC)", "multiplier": 40},
 }
 
@@ -39,7 +51,7 @@ Bet on who will win the 2027 Nigerian Presidential Election!
 
 *Candidates & Multipliers:*
 🔵 Bola Tinubu (APC) — 70x
-🟢 Atiku Abubakar (PDP) — 50x
+🟢 Atiku Abubakar (ADC) — 50x
 🔴 Peter Obi (NDC) — 40x
 
 *Minimum Deposit:* $13 USDT
