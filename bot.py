@@ -159,7 +159,5 @@ def main():
 
 
 if __name__ == "__main__":
-    from keep_alive import keep_alive
-
-    keep_alive()
+    # keep_alive() REMOVED - Only runs on Render now!
     main()
