@@ -26,6 +26,7 @@ SET_WALLET_ADDRESS = 0
 
 def main():
     db.init_db()
+    db.fix_candidate_names()  # ← TEMPORARY FIX - Remove after one deploy!
 
     if not BOT_TOKEN:
         raise ValueError("BOT_TOKEN is not set in environment variables!")
